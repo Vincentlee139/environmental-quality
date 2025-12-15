@@ -4,7 +4,6 @@ import datetime
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.templating import Jinja2Templates
-from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -30,7 +29,6 @@ async def lifespan(app: FastAPI):
     print("------------------------------------------------\n")
 
 app = FastAPI(lifespan=lifespan)
-app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # 1. Cấu hình Template (để render file HTML)
 templates = Jinja2Templates(directory="templates")
