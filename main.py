@@ -1,11 +1,12 @@
 # main.py
 import sqlite3
-import datetime
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.templating import Jinja2Templates
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+import datetime
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -30,6 +31,8 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(lifespan=lifespan)
 
+#app.mount("/static", StaticFiles(directory="static"), name="static")
+
 # 1. Cấu hình Template (để render file HTML)
 templates = Jinja2Templates(directory="templates")
 
@@ -45,12 +48,10 @@ app.add_middleware(
 def init_db():
     conn = sqlite3.connect('database.db')
     c = conn.cursor()
-    # Bảng lưu dữ liệu cảm biến
     c.execute('''CREATE TABLE IF NOT EXISTS sensors 
                  (id INTEGER PRIMARY KEY AUTOINCREMENT, 
                   temp REAL, hum REAL, pm25 INTEGER, gas INTEGER, 
                   timestamp DATETIME DEFAULT CURRENT_TIMESTAMP)''')
-    # Bảng lưu lịch sử cảnh báo (Logs)
     c.execute('''CREATE TABLE IF NOT EXISTS alerts 
                  (id INTEGER PRIMARY KEY AUTOINCREMENT, 
                   message TEXT, level TEXT, 
@@ -70,12 +71,13 @@ class SensorPayload(BaseModel):
 # --- LOGIC XỬ LÝ CHÍNH ---
 @app.post("/api/update")
 async def update_data(data: SensorPayload):
+    now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     conn = sqlite3.connect('database.db')
     c = conn.cursor()
     
     # Lưu dữ liệu cảm biến
-    c.execute("INSERT INTO sensors (temp, hum, pm25, gas) VALUES (?, ?, ?, ?)",
-              (data.temp, data.hum, data.pm25, data.gas))
+    c.execute("INSERT INTO sensors (temp, hum, pm25, gas, timestamp) VALUES (?, ?, ?, ?, ?)",
+              (data.temp, data.hum, data.pm25, data.gas, now_str))
     
     # Xử lý Logic điều khiển & Cảnh báo
     fan_status = "OFF"
@@ -90,18 +92,18 @@ async def update_data(data: SensorPayload):
     # Logic 1: Bụi cao -> Bật Quạt
     if data.pm25 > PM25_THRESHOLD:
         fan_status = "ON"
-    
+        
     # Logic 2: Có Gas -> Cảnh báo
     if data.gas > GAS_THRESHOLD:
         alert_msg = "Phát hiện rò rỉ khí Gas!"
         # Ghi log cảnh báo
-        c.execute("INSERT INTO alerts (message, level) VALUES (?, ?)", (alert_msg, "WARNING"))
+        c.execute("INSERT INTO alerts (message, level, timestamp) VALUES (?, ?, ?)", (alert_msg, "WARNING", now_str))
 
     # Logic 3: Cháy (Gas + Nhiệt) -> Bật Bơm
     if data.gas > GAS_THRESHOLD and data.temp > TEMP_THRESHOLD:
         pump_status = "ON"
         alert_msg = "CẢNH BÁO CHÁY! Đã kích hoạt máy bơm!"
-        c.execute("INSERT INTO alerts (message, level) VALUES (?, ?)", (alert_msg, "DANGER"))
+        c.execute("INSERT INTO alerts (message, level, timestamp) VALUES (?, ?, ?)", (alert_msg, "DANGER", now_str))
 
     conn.commit()
     conn.close()
@@ -144,3 +146,8 @@ async def get_alerts():
     
     alerts = [{"msg": r[0], "level": r[1], "time": r[2]} for r in rows]
     return alerts
+
+if __name__ == "__main__":
+    import uvicorn
+    # Chạy server trên cổng 8000
+    uvicorn.run(app, host="0.0.0.0", port=8000)
