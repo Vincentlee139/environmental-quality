@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hệ Thống Giám Sát An Toàn IoT</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <style>
+        body { background-color: #f0f2f5; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        .navbar { box-shadow: 0 2px 4px rgba(0,0,0,.1); }
+        .card-box { 
+            border-radius: 15px; 
+            color: white; 
+            padding: 20px; 
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1); 
+            transition: transform 0.3s;
+        }
+        .card-box:hover { transform: translateY(-5px); }
+        .bg-temp { background: linear-gradient(135deg, #ff6b6b, #ee5253); }
+        .bg-hum { background: linear-gradient(135deg, #48dbfb, #0abde3); }
+        .bg-dust { background: linear-gradient(135deg, #feca57, #ff9f43); }
+        .bg-gas { background: linear-gradient(135deg, #1dd1a1, #10ac84); }
+        .bg-button {background: linear-gradient();}
+
+        .main-card { border-radius: 15px; border: none; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+        .alert-log { max-height: 200px; overflow-y: auto; font-size: 0.9em; }
+        .status-badge { font-size: 1.1em; padding: 8px 15px; border-radius: 20px; }
+    </style>
+</head>
+<body>
+
+<nav class="navbar navbar-dark bg-primary mb-4">
+    <div class="container">
+        <span class="navbar-brand mb-0 h1"><i class="fas fa-shield-alt me-2"></i>TRẠM QUAN TRẮC THÔNG MINH</span>
+        <span class="text-white fw-bold" id="clock">00:00:00</span>
+    </div>
+</nav>
+
+<div class="container">
+    <div class="row mb-4">
+        <div class="col-md-3 mb-3">
+            <div class="card-box bg-temp">
+                <h5><i class="fas fa-temperature-high me-2"></i>Nhiệt Độ</h5>
+                <h1 class="fw-bold my-2" id="val-temp">--</h1>
+                <small>Đơn vị: °C</small>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="card-box bg-hum">
+                <h5><i class="fas fa-tint me-2"></i>Độ Ẩm</h5>
+                <h1 class="fw-bold my-2" id="val-hum">--</h1>
+                <small>Đơn vị: %</small>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="card-box bg-dust">
+                <h5><i class="fas fa-smog me-2"></i>Bụi PM2.5</h5>
+                <h1 class="fw-bold my-2" id="val-pm25">--</h1>
+                <small>Đơn vị: µg/m³</small>
+            </div>
+        </div>
+        <div class="col-md-3 mb-3">
+            <div class="card-box bg-gas">
+                <h5><i class="fas fa-wind me-2"></i>Khí Gas</h5>
+                <h1 class="fw-bold my-2" id="val-gas">--</h1>
+                <small>Đơn vị: ppm</small>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-8 mb-4">
+            <div class="card main-card h-100">
+                <div class="card-header bg-white fw-bold py-3">
+                    <i class="fas fa-chart-line me-2 text-primary"></i>Biểu Đồ Theo Dõi Thời Gian Thực
+                </div>
+                <div class="card-body">
+                    <canvas id="mainChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-4 mb-4">
+            <div class="card main-card mb-3">
+                <div class="card-header bg-white fw-bold py-3">
+                    <i class="fas fa-cogs me-2 text-secondary"></i>Trạng Thái Thiết Bị
+                </div>
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <span><i class="fas fa-fan me-2 text-info"></i>Quạt Lọc Khí</span>
+                        <span id="status-fan" class="badge bg-secondary status-badge">OFF</span>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span><i class="fas fa-fire-extinguisher me-2 text-danger"></i>Máy Bơm/Còi</span>
+                        <span id="status-pump" class="badge bg-secondary status-badge">OFF</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card main-card">
+                <div class="card-header bg-danger text-white fw-bold py-3">
+                    <i class="fas fa-bell me-2"></i>Nhật Ký Cảnh Báo
+                </div>
+                <div class="card-body alert-log" id="alert-box">
+                    <div class="text-center text-muted mt-4">Chưa có cảnh báo nào</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // --- 1. CẤU HÌNH BIỂU ĐỒ ---
+    const ctx = document.getElementById('mainChart').getContext('2d');
+    const chart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: [],
+            datasets: [
+                { label: 'Nhiệt độ (°C)', borderColor: '#ff6b6b', backgroundColor: 'rgba(255, 107, 107, 0.1)', data: [], tension: 0.4, fill: true },
+                { label: 'Bụi PM2.5', borderColor: '#feca57', backgroundColor: 'rgba(254, 202, 87, 0.1)', data: [], tension: 0.4, fill: true }
+            ]
+        },
+        options: { 
+            responsive: true,
+            interaction: { mode: 'index', intersect: false },
+            scales: { x: { display: false } } // Ẩn trục thời gian cho đỡ rối
+        }
+    });
+
+    // --- 2. HÀM CẬP NHẬT DỮ LIỆU ---
+    async function fetchData() {
+        try {
+            // Gọi API lấy dữ liệu mới nhất
+            let res = await fetch('/api/current');
+            let data = await res.json();
+            
+            // Cập nhật số liệu lên các thẻ
+            document.getElementById('val-temp').innerText = data.temp;
+            document.getElementById('val-hum').innerText = data.hum;
+            document.getElementById('val-pm25').innerText = data.pm25;
+            document.getElementById('val-gas').innerText = data.gas;
+
+            // Logic hiển thị trạng thái ON/OFF (Giả lập theo ngưỡng)
+            let fanBadge = document.getElementById('status-fan');
+            let pumpBadge = document.getElementById('status-pump');
+            
+            // Logic Quạt (Bụi > 100)
+            if(data.pm25 > 100) { 
+                fanBadge.className = "badge bg-success status-badge"; fanBadge.innerText = "ON"; 
+            } else { 
+                fanBadge.className = "badge bg-secondary status-badge"; fanBadge.innerText = "OFF"; 
+            }
+
+            // Logic Bơm (Nhiệt > 50 và Gas > 2000)
+            if(data.temp > 50 && data.gas > 2000) { 
+                pumpBadge.className = "badge bg-danger status-badge"; pumpBadge.innerText = "ON"; 
+            } else { 
+                pumpBadge.className = "badge bg-secondary status-badge"; pumpBadge.innerText = "OFF"; 
+            }
+
+            // Cập nhật biểu đồ
+            let timeLabel = new Date().toLocaleTimeString();
+            if (chart.data.labels.length > 20) { // Chỉ giữ 20 điểm dữ liệu
+                chart.data.labels.shift();
+                chart.data.datasets[0].data.shift();
+                chart.data.datasets[1].data.shift();
+            }
+            chart.data.labels.push(timeLabel);
+            chart.data.datasets[0].data.push(data.temp);
+            chart.data.datasets[1].data.push(data.pm25);
+            chart.update();
+
+        } catch (e) { console.log("Đang chờ dữ liệu..."); }
+    }
+
+    // --- 3. HÀM LẤY LỊCH SỬ CẢNH BÁO ---
+    async function fetchAlerts() {
+        try {
+            let res = await fetch('/api/alerts');
+            let alerts = await res.json();
+            let html = "";
+            
+            if(alerts.length === 0) {
+                html = '<div class="text-center text-muted mt-4">An toàn</div>';
+            } else {
+                alerts.forEach(a => {
+                    let icon = a.level === "DANGER" ? '<i class="fas fa-fire text-danger"></i>' : '<i class="fas fa-exclamation-triangle text-warning"></i>';
+                    html += `
+                        <div class="border-bottom p-2">
+                            <div class="d-flex justify-content-between">
+                                <strong class="${a.level === 'DANGER' ? 'text-danger' : 'text-warning'}">${icon} ${a.level}</strong>
+                                <small class="text-muted">${a.time}</small>
+                            </div>
+                            <div>${a.msg}</div>
+                        </div>`;
+                });
+            }
+            document.getElementById('alert-box').innerHTML = html;
+        } catch(e) {}
+    }
+
+    // --- 4. CHẠY ĐỊNH KỲ ---
+    setInterval(fetchData, 2000);   // Cập nhật thông số mỗi 2 giây
+    setInterval(fetchAlerts, 3000); // Cập nhật cảnh báo mỗi 3 giây
+    setInterval(() => {
+        document.getElementById('clock').innerText = new Date().toLocaleTimeString();
+    }, 1000);
+
+</script>
+</body>
+</html>
