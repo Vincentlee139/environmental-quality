@@ -70,7 +70,7 @@ def delete_data():
         c.execute("DELETE FROM sqlite_sequence WHERE name='sensors'")
         conn.commit()
         conn.close()
-        print("   ✅ Đã xong")
+        print("   - ✅ Đã xong")
     except Exception as e:
         print(f"   ⚠️ Lỗi khi dọn dẹp database: {e}")
     
