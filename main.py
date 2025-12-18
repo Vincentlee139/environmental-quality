@@ -10,33 +10,33 @@ import datetime
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # --- CODE CHẠY KHI KHỞI ĐỘNG (STARTUP) ---
+    # --- KHỞI ĐỘNG HỆ THỐNG (STARTUP) ---
     print("\n------------------------------------------------")
     print("🚀 HỆ THỐNG ĐANG KHỞI TẠO (SYSTEM STARTUP)...")
     print("   - Đang kết nối Database...")
-    init_db() # Gọi hàm tạo bảng ngay khi server bật
+    init_db()
     print("   - Đã tạo bảng 'sensors' và 'alerts' thành công!")
     print("   - Server đã sẵn sàng nhận dữ liệu từ ESP32.")
     print("------------------------------------------------\n")
     
-    yield # Điểm phân cách: Web chạy bình thường ở đây
+    yield 
     
-    # --- CODE CHẠY KHI TẮT HỆ THỐNG (SHUTDOWN) ---
+    # --- TẮT HỆ THỐNG (SHUTDOWN) ---
     print("\n------------------------------------------------")
     print("🛑 HỆ THỐNG ĐANG TẮT (SYSTEM SHUTDOWN)...")
     print("   - Đang đóng các kết nối ngầm...")
     print("   - Đang dọn dẹp bộ nhớ đệm...")
+    delete_data()
     print("👋 Tạm biệt! Hẹn gặp lại.")
     print("------------------------------------------------\n")
 
 app = FastAPI(lifespan=lifespan)
 
-#app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# 1. Cấu hình Template (để render file HTML)
+# 1. Cấu hình Template 
 templates = Jinja2Templates(directory="templates")
 
-# 2. Cấu hình CORS (Cho phép truy cập từ mọi nơi - Dev mode)
+# 2. Cấu hình CORS 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -59,7 +59,21 @@ def init_db():
     conn.commit()
     conn.close()
 
-init_db()
+#init_db()
+def delete_data():
+    try:
+        conn = sqlite3.connect('database.db')
+        c = conn.cursor()
+        c.execute("DELETE FROM alerts") 
+        c.execute("DELETE FROM sqlite_sequence WHERE name='alerts'") 
+        c.execute("DELETE FROM sensors")
+        c.execute("DELETE FROM sqlite_sequence WHERE name='sensors'")
+        conn.commit()
+        conn.close()
+        print("   ✅ Đã xong")
+    except Exception as e:
+        print(f"   ⚠️ Lỗi khi dọn dẹp database: {e}")
+    
 
 # 4. Model dữ liệu đầu vào từ ESP32
 class SensorPayload(BaseModel):
